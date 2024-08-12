@@ -1,4 +1,4 @@
-import streamlit as st
+-import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -6,8 +6,7 @@ import ta
 import pytz
 from datetime import datetime
 import plotly.graph_objects as go
-import time
-import threading
+from pandas.errors import EmptyDataError  # Import EmptyDataError
 
 # Define the ticker symbol for Bitcoin
 ticker = 'BTC-USD'
@@ -127,11 +126,9 @@ def log_signals(signals, decision, entry_point_long, entry_point_short, take_pro
     log_file = 'signals_log.csv'
     try:
         logs = pd.read_csv(log_file)
-    except (FileNotFoundError, pandas.errors.EmptyDataError):
+    except (FileNotFoundError, EmptyDataError):
         logs = pd.DataFrame(columns=['timestamp', 'RSI', 'MACD', 'ADX', 'CCI', 'MA', 'Entry Point Long', 'Entry Point Short', 'Take Profit', 'Stop Loss', 'Decision', 'Weighted Score'])
     
-    # Rest of the function remains the same
-
     # Add new log
     new_log = pd.DataFrame([{
         'timestamp': datetime.now(est).strftime('%Y-%m-%d %H:%M:%S'),
@@ -194,46 +191,39 @@ def main():
 
         indicators = technical_indicators_summary(data)
         moving_averages = moving_averages_summary(data)
-        
-        st.write("Technical Indicators:")
+
+        account_balance = st.number_input("Enter your account balance", min_value=0.0, value=1000.0, step=10.0)
+
+        decision, entry_point_long, entry_point_short, take_profit, stop_loss = generate_perpetual_options_decision(indicators, moving_averages, data, account_balance)
+
+        st.subheader("Technical Indicators Summary")
         st.write(indicators)
-        
-        st.write("Moving Averages:")
+
+        st.subheader("Moving Averages Summary")
         st.write(moving_averages)
-        
-        decision, entry_point_long, entry_point_short, take_profit, stop_loss = generate_perpetual_options_decision(indicators, moving_averages, data, account_balance=1000)
-        
+
+        st.subheader("Decision")
         st.write(f"Decision: {decision}")
-        st.write(f"Entry Point Long: {entry_point_long}")
-        st.write(f"Entry Point Short: {entry_point_short}")
-        st.write(f"Take Profit: {take_profit}")
-        st.write(f"Stop Loss: {stop_loss}")
+        st.write(f"Entry Point Long: {entry_point_long:.2f}")
+        st.write(f"Entry Point Short: {entry_point_short:.2f}")
+        st.write(f"Take Profit: {take_profit:.2f}")
+        st.write(f"Stop Loss: {stop_loss:.2f}")
 
-        # Plot Bitcoin price and moving averages
-        if st.checkbox("Show Price and Moving Averages"):
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='Close'))
-            fig.add_trace(go.Scatter(x=data.index, y=data['MA5'], mode='lines', name='MA5'))
-            fig.add_trace(go.Scatter(x=data.index, y=data['MA10'], mode='lines', name='MA10'))
-            fig.add_trace(go.Scatter(x=data.index, y=data['MA20'], mode='lines', name='MA20'))
-            fig.add_trace(go.Scatter(x=data.index, y=data['MA50'], mode='lines', name='MA50'))
-            fig.add_trace(go.Scatter(x=data.index, y=data['MA100'], mode='lines', name='MA100'))
-            fig.update_layout(title='Bitcoin Price and Moving Averages', xaxis_title='Date', yaxis_title='Price')
-            st.plotly_chart(fig)
-        
-        # Add a refresh button
-        if st.button('Refresh'):
-            st.experimental_rerun()
+        st.subheader("Live Bitcoin Price Chart")
+        fig = go.Figure()
+        fig.add_trace(go.Candlestick(x=data.index,
+                                     open=data['Open'],
+                                     high=data['High'],
+                                     low=data['Low'],
+                                     close=data['Close'],
+                                     name='Candlestick'))
+        fig.update_layout(title='Live Bitcoin Price Chart',
+                          xaxis_title='Date',
+                          yaxis_title='Price (USD)')
+        st.plotly_chart(fig)
 
-# Add periodic auto-refresh
-def auto_refresh():
-    while True:
-        time.sleep(30)
+    if st.button('Refresh'):
         st.experimental_rerun()
-
-if st.session_state.get('refresh_thread') is None:
-    st.session_state['refresh_thread'] = threading.Thread(target=auto_refresh, daemon=True)
-    st.session_state['refresh_thread'].start()
 
 if __name__ == "__main__":
     main()
